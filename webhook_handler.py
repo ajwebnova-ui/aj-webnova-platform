@@ -7,25 +7,34 @@ orchestrator = AJWebnovaMaster()
 
 @app.route('/webhook', methods=['POST'])
 def telegram_webhook():
-    """
-    This is the 'Ear' of your business.
-    It listens for the button clicks (Approve/Reject) from Telegram.
-    """
     update = request.get_json()
 
-    # Check if this is a callback query (button click)
+    # Handle Text Messages (to get Chat ID)
+    if "message" in update:
+        chat_id = update["message"]["chat"]["id"]
+        text = update["message"].get("text", "")
+
+        # If user sends /id or anything, tell them their ID
+        import requests
+        token = os.getenv("TELEGRAM_BOT_TOKEN")
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        payload = {
+            "chat_id": chat_id,
+            "text": f"✅ Connection Established!\n\nYour numeric Chat ID is: <code>{chat_id}</code>\n\nPlease copy this number and send it to me so I can launch the automation!",
+            "parse_mode": "HTML"
+        }
+        requests.post(url, json=payload)
+        return jsonify({"status": "id_sent"})
+
+    # Handle Button Clicks
     if "callback_query" in update:
         callback_query = update["callback_query"]
-        data = callback_query["data"] # e.g., "approve_uuid-123" or "reject_uuid-123"
+        data = callback_query["data"]
         chat_id = callback_query["message"]["chat"]["id"]
 
         if data.startswith("approve_"):
             lead_id = data.replace("approve_", "")
             result = orchestrator.handle_approval(lead_id, approved=True)
-
-            # Respond back to the user in Telegram
-            # We can use a simple API call here to tell them "Done"
-            # orchestrator.telegram.send_message(chat_id, "✅ Approval received! Starting AI Automation...")
             return jsonify({"status": "success", "message": result})
 
         elif data.startswith("reject_"):
