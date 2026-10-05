@@ -14,26 +14,46 @@ class AJWebnovaTelegram:
         payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
         return requests.post(url, json=payload).json()
 
+    def send_approval_request(self, chat_id, lead_id, business_name, amount):
+        """
+        Sends a lead approval request with INTERACTIVE BUTTONS.
+        Buttons: [Approve ✅] [Reject ❌]
+        """
+        url = f"{self.base_url}/sendMessage"
+
+        text = (
+            f"💰 <b>High-Ticket Lead Found!</b>\n\n"
+            f"<b>Client:</b> {business_name}\n"
+            f"<b>Est. Value:</b> {amount}\n"
+            f"<b>Lead ID:</b> <code>{lead_id}</code>\n\n"
+            f"Do you want to trigger the Analyst Agent and send a proposal?"
+        )
+
+        # Inline keyboard for Approve/Reject
+        keyboard = {
+            "inline_keyboard": [[
+                {"text": "Approve ✅", "callback_data": f"approve_{lead_id}"},
+                {"text": "Reject ❌", "callback_data": f"reject_{lead_id}"}
+            ]]
+        }
+
+        payload = {
+            "chat_id": chat_id,
+            "text": text,
+            "parse_mode": "HTML",
+            "reply_markup": keyboard
+        }
+        return requests.post(url, json=payload).json()
+
     def create_payment_invoice(self, chat_id, title, description, price_amount, currency="USD"):
-        """
-        Sends a payment invoice.
-        Note: For real payments, you must configure a provider in @BotFather.
-        """
         url = f"{self.base_url}/sendInvoice"
         payload = {
             "chat_id": chat_id,
             "title": title,
             "description": description,
             "payload": "aj_webnova_payment",
-            "provider_token": os.getenv("TELEGRAM_PAYMENT_PROVIDER_TOKEN"), # Configured via BotFather
+            "provider_token": os.getenv("TELEGRAM_PAYMENT_PROVIDER_TOKEN"),
             "currency": currency,
-            "prices": [{"label": title, "amount": price_amount}] # amount is in smallest unit (cents)
+            "prices": [{"label": title, "amount": price_amount}]
         }
         return requests.post(url, json=payload).json()
-
-    def check_payment_status(self, update_json):
-        """Processes payment updates from the Telegram webhook."""
-        # This would be called by a webhook handler
-        if "payment" in update_json:
-            return f"Payment received for {update_json['payment']['order_id']}"
-        return "No payment update."
