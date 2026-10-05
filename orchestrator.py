@@ -16,23 +16,17 @@ class AJWebnovaMaster:
             email=os.getenv("SENDER_EMAIL"),
             password=os.getenv("SENDER_PASSWORD")
         )
+        self.upi_id = "8792496494@super"
+        self.owner_email = os.getenv("SENDER_EMAIL")
 
     def process_new_lead(self, lead_info):
         """
-        NEW AUTOMATED PIPELINE:
-        Hunt -> DB Save -> Telegram Approval (Buttons) -> [User Click] -> Audit -> Proposal -> Email
+        Pipeline: Hunt -> DB Save -> Telegram Approval
         """
-        print(f"🚀 Starting Pipeline for: {lead_info['business_name']}")
-
-        # 1. HUNT: Filter the lead
         decision = self.agent.run_hunter(lead_info['job_description'])
         if "HIGH VALUE" not in decision.upper():
-            print("❌ Low value lead. Skipping.")
             return {"status": "skipped", "reason": "low_value"}
 
-        print("✅ High Value Lead Detected!")
-
-        # 2. SAVE: Store in Supabase as 'PENDING_APPROVAL'
         lead_data = {
             "business_name": lead_info['business_name'],
             "website": lead_info['website'],
@@ -42,67 +36,79 @@ class AJWebnovaMaster:
         }
         db_response = self.db.save_lead(lead_data)
         lead_id = db_response.data[0]['id']
-        print(f"💾 Saved to Supabase. Lead ID: {lead_id}")
 
-        # 3. APPROVAL: Send Interactive Buttons to Vikas
-        # Instead of just a message, we send Approve/Reject buttons.
         self.telegram.send_approval_request(
             chat_id=os.getenv("MY_TELEGRAM_CHAT_ID"),
             lead_id=lead_id,
             business_name=lead_info['business_name'],
             amount=lead_info.get('budget', '20,000')
         )
-        print("📱 Approval request sent to Telegram with buttons.")
-
         return {"status": "awaiting_approval", "lead_id": lead_id}
 
     def handle_approval(self, lead_id, approved=True):
         """
-        This is called when you click the 'Approve' button in Telegram.
-        It triggers the rest of the automation.
+        The "Action" logic for Telegram buttons.
         """
-        if not approved:
-            self.db.update_lead_status(lead_id, "REJECTED")
-            self.telegram.send_message(os.getenv("MY_TELEGRAM_CHAT_ID"), f"❌ Lead {lead_id} rejected.")
-            return "Rejected"
-
-        # --- THE FULL AUTOMATION TRIGGER ---
-        # Fetch lead details from DB
         res = self.db.supabase.table("leads").select("*").eq("id", lead_id).single().execute()
         lead = res.data
 
-        print(f"🚀 Approval received for {lead['business_name']}. Running AI Agents...")
+        if not approved:
+            # 1. Update DB
+            self.db.update_lead_status(lead_id, "REJECTED")
+            # 2. Notify Vikas via Telegram
+            self.telegram.send_message(os.getenv("MY_TELEGRAM_CHAT_ID"), f"❌ Lead {lead['business_name']} rejected.")
+            # 3. Notify Vikas via Email
+            self.mail.send_internal_notification(
+                self.owner_email,
+                "Lead Rejected",
+                f"You have rejected the lead: {lead['business_name']}. It has been marked as REJECTED in the database."
+            )
+            return "Rejected"
 
-        # 1. ANALYZE: Run the audit
+        # --- APPROVED WORKFLOW ---
+        # 1. Audit the site
         audit_results = self.agent.run_analyst(f"Business: {lead['business_name']}, URL: {lead['website']}")
         self.db.update_lead_status(lead_id, "AUDITED")
 
-        # 2. CLOSE: Generate proposal
+        # 2. Generate high-ticket proposal
         proposal = self.agent.run_closer(audit_results)
         self.db.update_lead_status(lead_id, "PROPOSED")
 
-        # 3. DELIVERY: Send Email
+        # 3. Send Proposal to Client
         if lead.get('contact_email'):
             self.mail.send_proposal(lead['contact_email'], lead['business_name'], proposal)
 
-        # 4. NOTIFY: Alert Vikas that the work is done
-        self.telegram.send_message(
+        # 4. Send Invoice with UPI ID to Client
+        if lead.get('contact_email'):
+            self.mail.send_invoice(
+                lead['contact_email'],
+                lead['business_name'],
+                lead.get('value_est', '20,000'),
+                self.upi_id
+            )
+
+        # 5. Final Notification to Vikas (Telegram & Email)
+        self.telegram.send_invoice_notification(
             os.getenv("MY_TELEGRAM_CHAT_ID"),
-            f"✅ <b>Automation Complete!</b>\n\nAudit and Proposal sent to {lead['business_name']}.<br>Lead ID: {lead_id}",
-            # Note: send_message needs to handle parse_mode='HTML' which it does in our tool
+            lead['business_name'],
+            lead.get('value_est', '20,000')
+        )
+        self.mail.send_internal_notification(
+            self.owner_email,
+            "Automation Complete",
+            f"High-Ticket Automation finished for {lead['business_name']}.\n\n- Audit completed.\n- Proposal sent.\n- Invoice with UPI (8792496494@super) sent."
         )
 
         return "Automation Complete"
 
 if __name__ == "__main__":
-    # Test Lead
+    # Test lead for confirmation
     example_lead = {
-        "business_name": "Luxury Dental Clinic",
-        "website": "www.luxurydental.com",
-        "job_description": "Looking for a high-end website to attract premium patients.",
-        "email": "contact@luxurydental.com",
+        "business_name": "Test Luxury Clinic",
+        "website": "www.testclinic.com",
+        "job_description": "Looking for a high-end website redesign for our clinic.",
+        "email": "test@client.com",
         "budget": "25000"
     }
-
     orchestrator = AJWebnovaMaster()
     orchestrator.process_new_lead(example_lead)
