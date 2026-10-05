@@ -34,3 +34,4 @@ This engine is designed to shift AJ Webnova from "hourly freelance work" to "val
 - `agent_engine.py`: The core AI logic and agent personas.
 - `main.py`: The workflow execution script.
 - `.env`: Secure storage for API credentials.
+Deploying v1.0
