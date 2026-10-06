@@ -14,7 +14,6 @@ def telegram_webhook():
         chat_id = update["message"]["chat"]["id"]
         text = update["message"].get("text", "")
 
-        # If user sends /id or anything, tell them their ID
         import requests
         token = os.getenv("TELEGRAM_BOT_TOKEN")
         url = f"https://api.telegram.org/bot{token}/sendMessage"
@@ -43,6 +42,17 @@ def telegram_webhook():
             return jsonify({"status": "success", "message": result})
 
     return jsonify({"status": "ignored"})
+
+@app.route('/metrics', methods=['GET'])
+def get_metrics():
+    """
+    API endpoint for the Dashboard to fetch live analytics.
+    """
+    try:
+        metrics = orchestrator.get_live_metrics()
+        return jsonify(metrics), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
