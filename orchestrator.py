@@ -62,24 +62,19 @@ class AJWebnovaMaster:
         return {"status": "awaiting_approval", "lead_id": lead_id}
 
     def handle_approval(self, lead_id, approved=True):
-        # This function now starts a BACKGROUND THREAD
-        # This allows the server to respond to Telegram INSTANTLY
-        # while the AI works in the background.
-
         if not approved:
             self.db.update_lead_status(lead_id, "REJECTED")
             self.telegram.send_message(os.getenv("MY_TELEGRAM_CHAT_ID"), f"❌ Lead {lead_id} rejected.")
             self.mail.send_internal_notification(self.owner_email, "Lead Rejected", f"Rejected lead {lead_id}.")
             return "Rejected"
 
-        # Start background processing
+        # Start background processing immediately
         thread = threading.Thread(target=self._run_ai_pipeline, args=(lead_id,))
         thread.start()
 
-        return "Processing in background..."
+        return "Processing in background... please wait a moment. 🚀"
 
     def _run_ai_pipeline(self, lead_id):
-        """The heavy lifting happens here, in the background."""
         try:
             res = self.db.supabase.table("leads").select("*").eq("id", lead_id).single().execute()
             lead = res.data
