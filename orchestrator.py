@@ -51,7 +51,7 @@ class AJWebnovaMaster:
             "value_est": lead_info.get('budget', '20000')
         }
         db_response = self.db.save_lead(lead_data)
-        lead_id = db_//_response.data[0]['id']
+        lead_id = db_response.data[0]['id']
 
         self.telegram.send_approval_request(
             chat_id=os.getenv("MY_TELEGRAM_CHAT_ID"),
