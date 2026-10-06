@@ -1,33 +1,43 @@
 import os
+import requests
 from flask import Flask, request, jsonify
 from orchestrator import AJWebnovaMaster
-import requests
 
 app = Flask(__name__)
 
-# Initialize orchestrator lazily to prevent crash on startup if env vars are missing
+# Global orchestrator instance
 orchestrator = None
 
 def get_orchestrator():
     global orchestrator
     if orchestrator is None:
+        print("--- INITIALIZING ORCHESTRATOR ---")
         try:
             orchestrator = AJWebnovaMaster()
+            print("--- ORCHESTRATOR INITIALIZED SUCCESSFULLY ---")
         except Exception as e:
-            print(f"CRITICAL ERROR: Failed to initialize AJWebnovaMaster: {e}")
+            print(f"--- CRITICAL ERROR initializing AJWebnovaMaster: {e} ---")
             return None
     return orchestrator
 
 @app.route('/webhook', methods=['POST'])
 def telegram_webhook():
     update = request.get_json()
+    print(f"RECEIVED WEBHOOK: {update}")
 
-    # Handle Text Messages (to get Chat ID)
+    if not update:
+        return jsonify({"status": "no_data"}), 400
+
+    # 1. Handle Text Messages (to get Chat ID)
     if "message" in update:
         chat_id = update["message"]["chat"]["id"]
-        text = update["message"].get("text", "")
+        print(f"Message received from chat {chat_id}")
 
         token = os.getenv("TELEGRAM_BOT_TOKEN")
+        if not token:
+            print("ERROR: TELEGRAM_BOT_TOKEN not found in environment")
+            return jsonify({"status": "config_error"}), 500
+
         url = f"https://api.telegram.org/bot{token}/sendMessage"
         payload = {
             "chat_id": chat_id,
@@ -37,26 +47,46 @@ def telegram_webhook():
         requests.post(url, json=payload)
         return jsonify({"status": "id_sent"})
 
-    # Handle Button Clicks
+    # 2. Handle Button Clicks (Callback Queries)
     if "callback_query" in update:
         callback_query = update["callback_query"]
         data = callback_query["data"]
         chat_id = callback_query["message"]["chat"]["id"]
+        callback_id = callback_query["id"]
 
-        # Respond to Telegram immediately to stop the loading spinner
+        print(f"Callback received: {data} from chat {chat_id}")
+
         token = os.getenv("TELEGRAM_BOT_TOKEN")
-        requests.post(f"https://api.telegram.org/bot{token}/answerCallbackQuery", json={
-            "callback_query_id": callback_query["id"],
-            "text": "Processing your request... please wait a moment. 🚀"
-        })
+        if not token:
+            print("ERROR: TELEGRAM_BOT_TOKEN not found in environment")
+            return jsonify({"status": "config_error"}), 500
+
+        # IMMEDIATELY respond to Telegram to stop the spinner
+        try:
+            answer_url = f"https://api.telegram.org/bot{token}/answerCallbackQuery"
+            requests.post(answer_url, json={
+                "callback_query_id": callback_id,
+                "text": "Processing your request... please wait a moment. 🚀"
+            })
+            print("Successfully sent 'Processing...' response to Telegram.")
+        except Exception as e:
+            print(f"Failed to send answerCallbackQuery: {e}")
 
         if data.startswith("approve_"):
             lead_id = data.replace("approve_", "")
+            print(f"Processing approval for lead: {lead_id}")
+
             master = get_orchestrator()
             if master:
-                result = master.handle_approval(lead_id, approved=True)
-                return jsonify({"status": "success", "message": result})
-            return jsonify({"status": "error", "message": "AI Engine not initialized"}), 500
+                try:
+                    result = master.handle_approval(lead_id, approved=True)
+                    print(f"Orchestrator result: {result}")
+                    return jsonify({"status": "success", "message": result})
+                except Exception as e:
+                    print(f"Error in handle_approval: {e}")
+                    return jsonify({"status": "error", "message": str(e)}), 500
+            else:
+                return jsonify({"status": "error", "message": "AI Engine not initialized"}), 500
 
         elif data.startswith("reject_"):
             lead_id = data.replace("reject_", "")
