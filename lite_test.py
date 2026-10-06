@@ -1,0 +1,23 @@
+import requests
+
+# Configuration
+TOKEN = "8768774796:AAEU2WQwxVubEktojFgSSwxtO-ucAOQJymY"
+CHAT_ID = "8615771277"
+
+def send_test():
+    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
+    text = "🚀 <b>AJ WEBNOVA SYSTEM CHECK</b>\n\nIf you can see this, the Bot is LIVE! 💰\n\nReady to hunt high-ticket clients."
+    payload = {"chat_id": CHAT_ID, "text": text, "parse_mode": "HTML"}
+
+    try:
+        print("Sending test message to Telegram...")
+        response = requests.post(url, json=payload)
+        if response.status_code == 200:
+            print("✅ SUCCESS: Message sent to Telegram!")
+        else:
+            print(f"❌ FAILED: {response.status_code} - {response.text}")
+    except Exception as e:
+        print(f"❌ ERROR: {e}")
+
+if __name__ == "__main__":
+    send_test()

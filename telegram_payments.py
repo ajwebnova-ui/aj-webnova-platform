@@ -32,11 +32,24 @@ class AJWebnovaTelegram:
         return requests.post(url, json=payload).json()
 
     def send_invoice_notification(self, chat_id, business_name, amount):
-        """Notifies the owner that an invoice was sent."""
         text = (
             f"💸 <b>Invoice Sent!</b>\n\n"
             f"An invoice of <b>{amount}</strong> has been sent to <b>{business_name}</b>.\n"
             f"Payment Method: UPI (8792496494@super)\n\n"
             f"I will notify you the moment payment is confirmed."
+        )
+        return self.send_message(chat_id, text)
+
+    def send_daily_metrics(self, chat_id, metrics):
+        """Sends a daily summary of agent performance."""
+        text = (
+            f"📈 <b>AJ Webnova Daily Analytics</b>\n"
+            f"----------------------------------\n"
+            f"🎯 Hunter: {metrics['hunter_count']} leads found\n"
+            f"🔍 Analyst: {metrics['analyst_count']} sites audited\n"
+            f"✍️ Closer: {metrics['closer_count']} proposals sent\n"
+            f"💰 Total Revenue Est: ₹{metrics['total_value']}\n"
+            f"----------------------------------\n"
+            f"Everything is running on auto-pilot. 🚀"
         )
         return self.send_message(chat_id, text)
